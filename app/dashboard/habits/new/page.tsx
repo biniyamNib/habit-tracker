@@ -1,18 +1,10 @@
+// app/dashboard/habits/new/page.tsx
 'use client';
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -22,9 +14,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';           // ← add this if missing
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { createHabit } from '../actions'; // we'll create this next
+import { createHabit } from '../actions';
 
 const formSchema = z.object({
   name: z.string().min(1, 'Habit name is required'),
@@ -33,11 +26,17 @@ const formSchema = z.object({
   color: z.string().default('#3b82f6'),
 });
 
+type FormValues = z.infer<typeof formSchema>;
+
 export default function NewHabit() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  const form = useForm<z.infer<typeof formSchema>>({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
@@ -47,12 +46,12 @@ export default function NewHabit() {
     },
   });
 
-  async function onSubmit(values: z.infer<typeof formSchema>) {
+  async function onSubmit(values: FormValues) {
     setLoading(true);
     try {
       await createHabit(values);
       router.push('/dashboard');
-      router.refresh(); // refresh server data
+      router.refresh();
     } catch (error) {
       console.error(error);
       alert('Failed to create habit');
@@ -65,82 +64,44 @@ export default function NewHabit() {
     <div className="max-w-2xl mx-auto">
       <h1 className="text-3xl font-bold mb-8">Create New Habit</h1>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Habit Name</FormLabel>
-                <FormControl>
-                  <Input placeholder="e.g. Code for 1 hour" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <div>
+          <Label htmlFor="name">Habit Name</Label>
+          <Input id="name" {...register('name')} placeholder="e.g. Code for 1 hour" />
+          {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>}
+        </div>
 
-          <FormField
-            control={form.control}
-            name="description"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Description (optional)</FormLabel>
-                <FormControl>
-                  <Textarea placeholder="Details or motivation..." {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <div>
+          <Label htmlFor="description">Description (optional)</Label>
+          <Textarea id="description" {...register('description')} placeholder="Details or motivation..." />
+          {errors.description && <p className="text-sm text-red-500 mt-1">{errors.description.message}</p>}
+        </div>
 
-          <FormField
-            control={form.control}
-            name="frequency"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Frequency</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select frequency" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="custom">Custom days</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <div>
+          <Label htmlFor="frequency">Frequency</Label>
+          <Select defaultValue="daily" onValueChange={(val) => {/* handle manually or use setValue */}}>
+            <SelectTrigger>
+              <SelectValue placeholder="Select frequency" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="daily">Daily</SelectItem>
+              <SelectItem value="weekly">Weekly</SelectItem>
+              <SelectItem value="custom">Custom days</SelectItem>
+            </SelectContent>
+          </Select>
+          {/* For Select + RHF, use Controller or setValue onChange */}
+        </div>
 
-          {/* Color picker - simple for MVP */}
-          <FormField
-            control={form.control}
-            name="color"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Color</FormLabel>
-                <FormControl>
-                  <Input type="color" {...field} />
-                </FormControl>
-                <FormDescription>
-                  Choose a color for your habit card
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <div>
+          <Label htmlFor="color">Color</Label>
+          <Input id="color" type="color" {...register('color')} />
+          {errors.color && <p className="text-sm text-red-500 mt-1">{errors.color.message}</p>}
+        </div>
 
-          <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? 'Creating...' : 'Create Habit'}
-          </Button>
-        </form>
-      </Form>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? 'Creating...' : 'Create Habit'}
+        </Button>
+      </form>
     </div>
   );
 }

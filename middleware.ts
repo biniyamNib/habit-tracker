@@ -1,32 +1,24 @@
-// middleware.ts  (or middleware.js)
-import { auth } from "./lib/auth";          // ← import from your root auth.ts file
-import { NextResponse } from "next/server";
+// middleware.ts  (or src/middleware.ts)
 
-export default auth((req) => {
-  // Optional: custom logic here (e.g., role checks, redirects)
-  // Example: redirect to /dashboard if already signed in and trying to access /auth/signin
-  const isSignedIn = !!req.auth;
+import { auth } from '@/lib/auth';
+import { NextResponse } from 'next/server';
 
-  if (req.nextUrl.pathname.startsWith("/auth/signin") && isSignedIn) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+export const middleware = auth((req) => {
+  // req.auth is now available (from JWT cookie)
+  const isLoggedIn = !!req.auth?.user;
+
+  // Example: protect /dashboard
+  if (req.nextUrl.pathname.startsWith('/dashboard') && !isLoggedIn) {
+    return NextResponse.redirect(new URL('/auth/signin', req.url));
   }
 
-  // Default: continue to the next middleware or route
   return NextResponse.next();
 });
 
+// Matcher – only run on specific paths
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for:
-     * - /api (API routes)
-     * - /_next/static (static files)
-     * - /_next/image (image optimization files)
-     * - favicon.ico
-     * - public files (images, fonts, etc.)
-     */
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)",
-    // Explicitly protect dashboard and sub-routes
-    "/dashboard/:path*",
-  ],
+  matcher: ['/dashboard/:path*', '/api/protected/:path*'],
 };
+
+// Optional: force Node.js runtime for middleware (Next.js 15.2+ experimental)
+// export const runtime = 'nodejs';   // Try this if you still get crypto error
