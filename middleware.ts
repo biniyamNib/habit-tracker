@@ -1,5 +1,7 @@
 // middleware.ts  (or src/middleware.ts)
 
+export const runtime = 'nodejs';
+
 import { auth } from '@/lib/auth';
 import { NextResponse } from 'next/server';
 

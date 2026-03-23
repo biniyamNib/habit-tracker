@@ -5,13 +5,13 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // url = env("DATABASE_URL")
 }
 
 model User {
   id             String    @id @default(cuid())
   name           String?
   email          String    @unique
+  password       String?
   emailVerified  DateTime?
   image          String?
   createdAt      DateTime  @default(now())
@@ -24,6 +24,12 @@ model User {
 
   // Incoming shares: habits others shared with me
   receivedShares Share[]   @relation("ReceivedShares")       // ← named
+
+  sentRequests     FriendRequest[] @relation("SentRequests")
+  receivedRequests FriendRequest[] @relation("ReceivedRequests")
+
+  friendsAsUser1   Friendship[]    @relation("UserFriends1")
+  friendsAsUser2   Friendship[]    @relation("UserFriends2")
 
   accounts       Account[]
   sessions       Session[]
@@ -78,6 +84,9 @@ model Share {
   // Opposite of User.receivedShares
   recipient   User     @relation("ReceivedShares", fields: [recipientId], references: [id], onDelete: Cascade)
 
+  createdAt   DateTime @default(now())        // ← add this
+  updatedAt   DateTime @updatedAt
+
   @@unique([habitId, recipientId])  // Prevent duplicate shares of same habit to same person
   @@map("shares")
 }
@@ -120,4 +129,32 @@ model VerificationToken {
 
   @@unique([identifier, token])
   @@map("verification_tokens")
+}
+
+model FriendRequest {
+  id          String   @id @default(cuid())
+  senderId    String
+  receiverId  String
+  status      String   @default("pending") // pending, accepted, rejected
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sender      User     @relation("SentRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("ReceivedRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId])
+  @@map("friend_requests")
+}
+
+model Friendship {
+  id          String   @id @default(cuid())
+  user1Id     String
+  user2Id     String
+  createdAt   DateTime @default(now())
+
+  user1       User     @relation("UserFriends1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2       User     @relation("UserFriends2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+  @@map("friendships")
 }

@@ -73,3 +73,21 @@ export async function toggleCheckIn(habitId: string, date: Date = new Date(), co
   revalidatePath(`/dashboard/habits/${habitId}`);
   return { success: true };
 }
+
+export async function deleteHabit(habitId: string) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error('Unauthorized');
+
+  const habit = await prisma.habit.findFirst({
+    where: { id: habitId, userId: session.user.id },
+  });
+
+  if (!habit) throw new Error('Habit not found or not owned');
+
+  await prisma.habit.delete({
+    where: { id: habitId },
+  });
+
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/habits');
+}

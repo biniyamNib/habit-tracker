@@ -1,9 +1,10 @@
-import { auth } from '@/lib/auth';
+// app/dashboard/layout.tsx
+import { auth, signOut } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { LogOut, Home, Users, Share2, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { LogOut } from 'lucide-react';
-import { signOut } from 'next-auth/react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default async function DashboardLayout({
   children,
@@ -17,39 +18,90 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Top Nav */}
-      <header className="bg-white border-b sticky top-0 z-10">
+    <div className="min-h-screen bg-gray-50 dark:bg-zinc-950">
+      {/* Top Navigation Bar */}
+      <header className="sticky top-0 z-40 border-b bg-white/80 dark:bg-zinc-900/80 backdrop-blur-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <Link href="/dashboard" className="text-xl font-bold">
+          <div className="flex h-16 items-center justify-between">
+            {/* Logo / Brand */}
+            <Link href="/dashboard" className="flex items-center gap-2 font-semibold text-xl">
+              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-violet-500 rounded-lg flex items-center justify-center text-white font-bold">
+                C
+              </div>
               ChainTogether
             </Link>
 
+            {/* Right side: Theme + User + Sign out */}
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">
-                {session.user.name || session.user.email}
-              </span>
-              <form
-                action={async () => {
-                  'use server';
-                  await signOut({ redirectTo: '/' });
-                }}
-              >
-                <Button variant="ghost" size="sm" type="submit">
-                  <LogOut className="h-4 w-4 mr-2" />
-                  Sign out
-                </Button>
-              </form>
+              <ThemeToggle />
+
+              <div className="hidden md:flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {session.user.name || session.user.email?.split('@')[0]}
+                </span>
+
+                <form
+                  action={async () => {
+                    'use server';
+                    await signOut({ redirectTo: '/' });
+                  }}
+                >
+                  <Button variant="ghost" size="sm" className="gap-2">
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </Button>
+                </form>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {children}
-      </main>
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className="hidden md:block w-64 border-r bg-white dark:bg-zinc-900 h-[calc(100vh-4rem)]">
+          <nav className="p-6 space-y-1">
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <Home className="h-5 w-5" />
+              My Habits
+            </Link>
+
+            <Link
+              href="/dashboard/social"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <Users className="h-5 w-5" />
+              Friends & Requests
+            </Link>
+
+            <Link
+              href="/dashboard/shared"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <Share2 className="h-5 w-5" />
+              Shared with Me
+            </Link>
+
+            <Link
+              href="/dashboard/settings"
+              className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 transition-colors"
+            >
+              <Settings className="h-5 w-5" />
+              Settings
+            </Link>
+          </nav>
+        </aside>
+
+        {/* Main content area */}
+        <main className="flex-1 overflow-auto">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
