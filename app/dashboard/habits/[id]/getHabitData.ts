@@ -1,27 +1,28 @@
 // app/dashboard/habits/[id]/getHabitData.ts
 'use server';
 
-import prisma  from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { notFound } from 'next/navigation';
 
 export async function getHabitData(id: string | undefined) {
+  console.log('=== getHabitData called ===');
+  console.log('Received ID from route:', id);
+
   const session = await auth();
-  console.log('[getHabitData] Current user ID:', session?.user?.id);
-  console.log('[getHabitData] Requested habit ID:', id);
+  console.log('Session user ID:', session?.user?.id || 'NO SESSION');
 
   if (!session?.user?.id) {
-    console.log('[getHabitData] No authenticated user → unauthorized');
+    console.log('No authenticated user → throwing unauthorized');
     throw new Error('Unauthorized');
   }
 
-  // Guard against undefined/missing id
-  if (!id || typeof id !== 'string' || id.trim() === '') {
-    console.log('[getHabitData] Invalid/missing ID');
-    notFound(); // or throw new Error('Habit ID required')
+  if (!id) {
+    console.log('ID is falsy/undefined → forcing notFound');
+    notFound();
   }
 
-  console.log('Fetching habit with ID:', id); // debug log
+  console.log('Querying Prisma for habit ID:', id);
 
   const habit = await prisma.habit.findUnique({
     where: { id },
@@ -32,15 +33,50 @@ export async function getHabitData(id: string | undefined) {
     },
   });
 
-  console.log('[getHabitData] Found habit?', !!habit);
+  console.log('Prisma result - habit exists?', !!habit);
   if (habit) {
-    console.log('[getHabitData] Habit owner ID:', habit.userId);
+    console.log('Habit found → name:', habit.name);
+    console.log('Habit owner userId:', habit.userId);
+    console.log('Current session userId:', session.user.id);
+    console.log('Ownership match?', habit.userId === session.user.id);
+  } else {
+    console.log('No habit found in DB for this ID');
   }
 
-  if (!habit || habit.userId !== session.user.id) {
-    console.log('[getHabitData] Habit not found or ownership mismatch → 404');
+  if (!habit) {
+    console.log('Habit is null → forcing notFound');
     notFound();
   }
 
-  return habit;
+  // Fetch current friends of the owner
+  const friendships = await prisma.friendship.findMany({
+    where: {
+      OR: [
+        { user1Id: habit.userId },
+        { user2Id: habit.userId },
+      ],
+    },
+    select: {
+      user1: { select: { id: true, name: true, email: true } },
+      user2: { select: { id: true, name: true, email: true } },
+    },
+  });
+
+  const friends = friendships
+    .map(f => (f.user1.id === habit.userId ? f.user2 : f.user1))
+    .filter(f => f.id !== habit.userId); // exclude self
+
+  console.log('Friends fetched:', friends.length);
+
+  // Fetch shares (who this habit is shared with)
+  const shares = await prisma.share.findMany({
+    where: { habitId: id },
+    include: {
+      recipient: { select: { id: true, name: true, email: true } },
+    },
+  });
+
+  console.log('Shares fetched:', shares.length);
+
+  return { habit, friends, shares };
 }

@@ -4,27 +4,20 @@
 import prisma from '@/lib/prisma';
 import { auth } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { pusherServer } from '@/lib/pusher';
 
 export async function sendFriendRequest(receiverEmail: string) {
   const session = await auth();
-  if (!session?.user?.id || !session.user.email) {
-    throw new Error('Unauthorized');
-  }
+  if (!session?.user?.id || !session.user.email) throw new Error('Unauthorized');
 
   const receiver = await prisma.user.findUnique({
     where: { email: receiverEmail },
   });
 
-  if (!receiver) {
-    throw new Error('User not found');
-  }
+  if (!receiver) throw new Error('User not found');
+  if (receiver.id === session.user.id) throw new Error('Cannot add yourself');
 
-  if (receiver.id === session.user.id) {
-    throw new Error('Cannot add yourself');
-  }
-
-  // Check if already friends or request exists
-  const existingRequest = await prisma.friendRequest.findFirst({
+  const existing = await prisma.friendRequest.findFirst({
     where: {
       OR: [
         { senderId: session.user.id, receiverId: receiver.id },
@@ -33,15 +26,20 @@ export async function sendFriendRequest(receiverEmail: string) {
     },
   });
 
-  if (existingRequest) {
-    throw new Error('Request already exists or you are already connected');
-  }
+  if (existing) throw new Error('Request already exists or already friends');
 
   const request = await prisma.friendRequest.create({
     data: {
       senderId: session.user.id,
       receiverId: receiver.id,
     },
+  });
+
+  // Notify receiver
+  await pusherServer.trigger(`user-${receiver.id}`, 'new-friend-request', {
+    id: request.id,
+    sender: { id: session.user.id, name: session.user.name || session.user.email },
+    createdAt: request.createdAt.toISOString(),
   });
 
   revalidatePath('/dashboard/social');
@@ -60,7 +58,6 @@ export async function acceptFriendRequest(requestId: string) {
     throw new Error('Invalid request');
   }
 
-  // Create mutual friendship (two records for bidirectional query ease)
   await prisma.$transaction([
     prisma.friendship.create({
       data: { user1Id: request.senderId, user2Id: request.receiverId },
@@ -73,6 +70,12 @@ export async function acceptFriendRequest(requestId: string) {
       data: { status: 'accepted' },
     }),
   ]);
+
+  // Notify sender that request was accepted
+  await pusherServer.trigger(`user-${request.senderId}`, 'friend-accepted', {
+    friend: { id: request.receiverId, name: session.user.name || session.user.email },
+    createdAt: new Date().toISOString(),
+  });
 
   revalidatePath('/dashboard/social');
   return { success: true };
@@ -185,3 +188,52 @@ export async function shareHabitAction(formData: FormData) {
 
   return { success: true };
 }
+
+// export async function sendNudge(recipientId: string, message: string, habitId?: string) {
+//   const session = await auth();
+//   if (!session?.user?.id) throw new Error('Unauthorized');
+
+//   // Basic permission check: either friends or the habit is shared with them
+//   let hasPermission = false;
+
+//   if (habitId) {
+//     // Check if sender owns the habit and it's shared with recipient
+//     const share = await prisma.share.findFirst({
+//       where: {
+//         habitId,
+//         ownerId: session.user.id,
+//         recipientId,
+//       },
+//     });
+//     hasPermission = !!share;
+//   } else {
+//     // General nudge → check friendship
+//     const friendship = await prisma.friendship.findFirst({
+//       where: {
+//         OR: [
+//           { user1Id: session.user.id, user2Id: recipientId },
+//           { user2Id: session.user.id, user1Id: recipientId },
+//         ],
+//       },
+//     });
+//     hasPermission = !!friendship;
+//   }
+
+//   if (!hasPermission) {
+//     throw new Error('Not allowed to send nudge to this user');
+//   }
+
+//   const nudge = await prisma.nudge.create({
+//     data: {
+//       senderId: session.user.id,
+//       recipientId,
+//       habitId,
+//       message,
+//     },
+//   });
+
+//   revalidatePath('/dashboard/shared');
+//   revalidatePath('/dashboard/social');
+
+//   return nudge;
+// }

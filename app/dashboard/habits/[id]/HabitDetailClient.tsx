@@ -11,22 +11,36 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-
+import { useRouter } from 'next/navigation';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Calendar } from '@/components/ui/calendar';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Pencil, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { deleteHabit } from '../actions';
-import { toggleCheckIn } from '../actions';
+import { Pencil, Trash2, Heart } from 'lucide-react';
+import { deleteHabit, toggleCheckIn } from '../actions';
+import { sendNudge } from '../../nudges/actions'
 
 type HabitDetailClientProps = {
-  habit: {
+  habit?: {
     id: string;
     name: string;
     description?: string | null;
     color: string;
+    userId: string;
+    user?: {
+      name: string | null;
+      email: string | null;
+      image?: string | null;
+    };
     checkIns: Array<{
       id: string;
       habitId: string;
@@ -34,37 +48,57 @@ type HabitDetailClientProps = {
       completed: boolean;
       note?: string | null;
     }>;
-  };
-  friends: Array<{
+  } | null;
+  friends?: Array<{ id: string; name: string | null; email: string | null }>;
+  shares?: Array<{
     id: string;
-    name: string | null;
-    email: string | null;
+    recipient: { id: string; name: string | null; email: string | null };
   }>;
-  shares: Array<{
-    id: string;
-    recipient: {
-      id: string;
-      name: string | null;
-      email: string | null;
-    };
-  }>;
+  isOwner: boolean;
+  isSharedWithMe: boolean;
+  currentUserId: string;
 };
 
-export function HabitDetailClient({ habit, friends, shares }: HabitDetailClientProps) {
+export function HabitDetailClient({
+  habit,
+  friends = [],
+  shares = [],
+  isOwner,
+  isSharedWithMe,
+  currentUserId,
+}: HabitDetailClientProps) {
   const router = useRouter();
+
+  if (!habit) {
+    return (
+      <div className="p-8 text-center">
+        <h2 className="text-2xl font-bold text-red-600 dark:text-red-400">Habit not found</h2>
+        <p className="mt-4 text-gray-600 dark:text-gray-400">
+          This habit may have been deleted or you don't have access.
+        </p>
+        <Button asChild className="mt-6">
+          <Link href="/dashboard">Back to Dashboard</Link>
+        </Button>
+      </div>
+    );
+  }
+
   const today = startOfDay(new Date());
 
-  // Chart data (last 60 days)
+  // Streak chart data (last 60 days)
   const streakData = Array.from({ length: 60 }, (_, i) => {
     const date = subDays(today, i);
-    const checkIn = habit.checkIns.find(c => startOfDay(c.date).getTime() === date.getTime());
+    const checkIn = habit.checkIns?.find(
+      (c) => startOfDay(c.date).getTime() === startOfDay(date).getTime()
+    ) ?? null;
+
     return {
       date: format(date, 'MMM dd'),
       completed: checkIn ? (checkIn.completed ? 1 : 0) : 0,
     };
   }).reverse();
 
-  // Current streak
+  // Current streak calculation
   let currentStreak = 0;
   let tempStreak = 0;
   const sortedCheckIns = [...habit.checkIns].sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -89,162 +123,234 @@ export function HabitDetailClient({ habit, friends, shares }: HabitDetailClientP
     }, [])
   ) || 0;
 
-  const todayCheckIn = habit.checkIns.find(c => isToday(c.date));
+  const todayCheckIn = habit.checkIns?.find((c) => isToday(c.date));
 
   return (
     <div className="space-y-8 p-4 md:p-6 max-w-5xl mx-auto">
-      {/* Header */}
+      {/* Header with owner info when shared */}
       <div className="flex flex-col sm:flex-row justify-between items-start gap-6">
         <div className="flex items-center gap-4">
-          <div
-            className="w-16 h-16 rounded-full flex-shrink-0"
-            style={{ backgroundColor: habit.color }}
-          />
+          {isSharedWithMe && habit.user?.image ? (
+            <img
+              src={habit.user.image}
+              alt={habit.user.name || 'Owner'}
+              className="w-16 h-16 rounded-full object-cover border-2 border-gray-200 dark:border-zinc-700"
+            />
+          ) : (
+            <div
+              className="w-16 h-16 rounded-full flex-shrink-0"
+              style={{ backgroundColor: habit.color }}
+            />
+          )}
           <div>
             <h1 className="text-3xl font-bold">{habit.name}</h1>
             {habit.description && (
               <p className="text-gray-600 dark:text-gray-400 mt-1">{habit.description}</p>
             )}
+            {isSharedWithMe && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Shared by {habit.user?.name || habit.user?.email?.split('@')[0] || 'someone'}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3 self-end sm:self-auto">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push(`/dashboard/habits/${habit.id}/edit`)}
-          >
-            <Pencil className="h-4 w-4 mr-2" />
-            Edit
-          </Button>
+        {/* Owner-only controls */}
+        {isOwner && (
+          <div className="flex flex-col items-end gap-4">
+            <div className="text-right">
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                {currentStreak} day{currentStreak !== 1 ? 's' : ''} streak
+              </div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                Longest: {longestStreak} day{longestStreak !== 1 ? 's' : ''}
+              </div>
+            </div>
 
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm">
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => router.push(`/dashboard/habits/${habit.id}/edit`)}
+              >
+                <Pencil className="h-4 w-4 mr-2" />
+                Edit
               </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete this habit?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete the habit, all check-ins, and any shares. This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={async () => {
-                    try {
-                      await deleteHabit(habit.id);
-                      router.push('/dashboard');
-                      router.refresh();
-                    } catch (err) {
-                      alert('Failed to delete habit');
-                    }
-                  }}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  Delete Habit
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete "{habit.name}"?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete the habit, all check-ins, and any shares. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={async () => {
+                        try {
+                          await deleteHabit(habit.id);
+                          router.push('/dashboard');
+                          router.refresh();
+                        } catch (err) {
+                          console.error('Delete failed:', err);
+                          alert('Failed to delete habit');
+                        }
+                      }}
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      Delete Habit
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Today's Check-in */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Today's Check-in</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="text-lg font-medium">
-              {todayCheckIn
-                ? todayCheckIn.completed
-                  ? '✅ Marked as done today!'
-                  : '❌ Marked as missed'
-                : 'Not marked yet'}
+      {/* Read-only notice for shared viewers */}
+      {isSharedWithMe && !isOwner && (
+        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4 text-center">
+          <p className="text-blue-700 dark:text-blue-300 font-medium">
+            This is a shared habit • Read-only view
+          </p>
+        </div>
+      )}
+
+      {/* Today's Check-in – only visible to owner */}
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Today's Check-in</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="text-lg font-medium">
+                {todayCheckIn
+                  ? todayCheckIn.completed
+                    ? '✅ Marked as done today!'
+                    : '❌ Marked as missed'
+                  : 'Not marked yet'}
+              </div>
+
+              <div className="flex gap-4 w-full sm:w-auto">
+                <form action={async () => await toggleCheckIn(habit.id, new Date(), true)}>
+                  <Button
+                    type="submit"
+                    variant={todayCheckIn?.completed ? 'default' : 'outline'}
+                    disabled={todayCheckIn?.completed}
+                    className="w-full sm:w-auto"
+                  >
+                    Mark Done
+                  </Button>
+                </form>
+
+                <form action={async () => await toggleCheckIn(habit.id, new Date(), false)}>
+                  <Button
+                    type="submit"
+                    variant="destructive"
+                    disabled={!todayCheckIn?.completed && !todayCheckIn}
+                    className="w-full sm:w-auto"
+                  >
+                    Mark Missed
+                  </Button>
+                </form>
+              </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
 
-            <div className="flex gap-4 w-full sm:w-auto">
-              <form action={async () => await toggleCheckIn(habit.id, new Date(), true)}>
-                <Button
-                  type="submit"
-                  variant={todayCheckIn?.completed ? 'default' : 'outline'}
-                  disabled={todayCheckIn?.completed}
-                  className="w-full sm:w-auto"
-                >
-                  Mark Done
-                </Button>
-              </form>
+      {/* Sharing Status – only visible to owner */}
+      {isOwner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sharing Status</CardTitle>
+            <CardDescription>
+              This habit is shared with {shares.length} friend{shares.length !== 1 ? 's' : ''}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {shares.length === 0 ? (
+              <div className="text-center py-6 text-gray-500 dark:text-gray-400">
+                <p>Not shared with anyone yet</p>
+                <p className="text-sm mt-2">Share it to get accountability from friends</p>
+              </div>
+            ) : (
+              <ul className="space-y-4">
+                {shares.map((share) => {
+                  const recipient = share.recipient;
+                  return (
+                    <li
+                      key={share.id}
+                      className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800 p-4 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-300 to-gray-400 dark:from-zinc-700 dark:to-zinc-600 flex items-center justify-center text-gray-600 dark:text-gray-300 font-medium">
+                          {recipient.name?.[0]?.toUpperCase() || recipient.email?.[0]?.toUpperCase() || '?'}
+                        </div>
+                        <div>
+                          <p className="font-medium">
+                            {recipient.name || recipient.email?.split('@')[0]}
+                          </p>
+                          {recipient.email && (
+                            <p className="text-sm text-gray-500 dark:text-gray-400">{recipient.email}</p>
+                          )}
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
+                        Revoke
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-              <form action={async () => await toggleCheckIn(habit.id, new Date(), false)}>
-                <Button
-                  type="submit"
-                  variant="destructive"
-                  disabled={!todayCheckIn?.completed && !todayCheckIn}
-                  className="w-full sm:w-auto"
-                >
-                  Mark Missed
-                </Button>
-              </form>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Thank you / Reaction button – only for shared viewers */}
+      {isSharedWithMe && !isOwner && (
+        <Card className="mt-8">
+          <CardHeader>
+            <CardTitle>Show appreciation</CardTitle>
+            <CardDescription>Let the owner know you value their shared progress</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              action={async () => {
+                // 'use server';
+                try {
+                  await sendNudge(
+                    habit.userId,
+                    "Thank you for sharing your habit! It's inspiring and motivating to see your progress 💙",
+                    habit.id
+                  );
+                  // Optional: toast success message (add later if desired)
+                } catch (err) {
+                  console.error('Thank you nudge failed:', err);
+                }
+              }}
+            >
+              <Button type="submit" className="w-full md:w-auto flex items-center gap-2">
+                <Heart className="h-4 w-4" />
+                Thank You for Sharing!
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Sharing Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Sharing Status</CardTitle>
-          <CardDescription>
-            This habit is currently shared with {shares.length} friend{shares.length !== 1 ? 's' : ''}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {shares.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-6">
-              Not shared with anyone yet
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {shares.map((share) => (
-                <li
-                  key={share.id}
-                  className="flex items-center justify-between bg-gray-50 dark:bg-zinc-800 p-3 rounded-lg"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-gray-200 dark:bg-zinc-700 flex items-center justify-center text-sm font-medium">
-                      {share.recipient.name?.[0]?.toUpperCase() ||
-                        share.recipient.email?.[0]?.toUpperCase() ||
-                        '?'}
-                    </div>
-                    <div>
-                      <p className="font-medium">
-                        {share.recipient.name || share.recipient.email?.split('@')[0]}
-                      </p>
-                      {share.recipient.email && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          {share.recipient.email}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {/* Revoke button placeholder - can be implemented later */}
-                  {/* <Button variant="ghost" size="sm" className="text-red-600 hover:text-red-700">
-                    Revoke
-                  </Button> */}
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Streak Chart */}
+      {/* Streak Chart – visible to everyone */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Activity (Last 60 Days)</CardTitle>
@@ -270,19 +376,20 @@ export function HabitDetailClient({ habit, friends, shares }: HabitDetailClientP
         </CardContent>
       </Card>
 
-      {/* Improved Streak Heatmap */}
+      {/* Activity Heatmap – visible to everyone */}
       <Card>
         <CardHeader>
-          <CardTitle>Streak Heatmap</CardTitle>
-          <CardDescription>Last 6 months of activity</CardDescription>
+          <CardTitle>Activity Heatmap</CardTitle>
+          <CardDescription>Last 6 months of consistency</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-1.5 max-w-md mx-auto">
             {Array.from({ length: 180 }).map((_, i) => {
               const date = subDays(new Date(), 179 - i);
-              const checkIn = habit.checkIns.find(
+              const checkIn = habit.checkIns?.find(
                 (c) => startOfDay(c.date).getTime() === startOfDay(date).getTime()
               );
+
               let intensity = 'bg-gray-200 dark:bg-zinc-700';
               if (checkIn?.completed) {
                 intensity = 'bg-green-500';
@@ -291,10 +398,8 @@ export function HabitDetailClient({ habit, friends, shares }: HabitDetailClientP
               return (
                 <div
                   key={i}
-                  className={`w-4 h-4 md:w-5 md:h-5 rounded-sm ${intensity} hover:scale-150 transition-transform cursor-pointer`}
-                  title={`${format(date, 'MMM d, yyyy')}${
-                    checkIn ? ` - ${checkIn.completed ? 'Done' : 'Missed'}` : ' - No activity'
-                  }`}
+                  className={`w-5 h-5 rounded-sm ${intensity} hover:scale-150 transition-transform cursor-help`}
+                  title={`${format(date, 'MMM d, yyyy')} - ${checkIn ? (checkIn.completed ? 'Completed' : 'Missed') : 'No activity'}`}
                 />
               );
             })}
@@ -302,34 +407,6 @@ export function HabitDetailClient({ habit, friends, shares }: HabitDetailClientP
           <div className="mt-4 flex justify-between text-xs text-gray-500 dark:text-gray-400">
             <span>6 months ago</span>
             <span>Today</span>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Calendar Overview (kept as secondary view) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Calendar Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex justify-center">
-            <Calendar
-              mode="single"
-              selected={new Date()}
-              className="rounded-md border"
-              modifiers={{
-                completed: habit.checkIns
-                  .filter((c) => c.completed)
-                  .map((c) => c.date),
-              }}
-              modifiersStyles={{
-                completed: {
-                  fontWeight: 'bold',
-                  backgroundColor: `${habit.color}33`,
-                  color: habit.color,
-                },
-              }}
-            />
           </div>
         </CardContent>
       </Card>
