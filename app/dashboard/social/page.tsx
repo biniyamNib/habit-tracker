@@ -1,6 +1,6 @@
 // app/dashboard/social/page.tsx
 import { auth } from '@/lib/auth';
-import prisma  from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ export default async function SocialPage() {
     }),
   ]);
 
-  // Deduplicate friends using Map (prevents duplicate keys)
+  // Deduplicate friends
   const friendMap = new Map<string, { id: string; name: string | null; email: string | null }>();
 
   friendships.forEach((f) => {
@@ -53,109 +53,145 @@ export default async function SocialPage() {
   const friendList = Array.from(friendMap.values());
 
   return (
-    <div className="space-y-8 p-4 md:p-6 max-w-5xl mx-auto">
-      <h1 className="text-3xl font-bold">Social & Accountability</h1>
+    <div className="max-w-5xl mx-auto space-y-12 p-6">
+      <div>
+        <h1 className="text-4xl font-semibold tracking-tight">Friends & Accountability</h1>
+        <p className="text-zinc-600 dark:text-zinc-400 mt-3">
+          Build habits together with people you trust
+        </p>
+      </div>
 
-      {/* Add friend */}
-      <Card>
+      {/* Add Friend */}
+      <Card className="border-zinc-200 dark:border-zinc-800">
         <CardHeader>
-          <CardTitle>Add Friend</CardTitle>
+          <CardTitle>Add a Friend</CardTitle>
         </CardHeader>
         <CardContent>
           <form
             action={async (formData: FormData) => {
               'use server';
               const email = formData.get('email') as string;
+              if (!email) return;
               try {
                 await sendFriendRequest(email);
-              } catch (err) {
+              } catch (err: any) {
                 console.error(err);
+                // You can improve error handling later with toasts
               }
             }}
+            className="flex gap-4"
           >
-            <div className="flex gap-4">
-              <Input name="email" placeholder="Friend's email" required type="email" />
-              <Button type="submit">Send Request</Button>
-            </div>
+            <Input 
+              name="email" 
+              type="email" 
+              placeholder="friend@example.com" 
+              required 
+              className="flex-1 py-6 text-base"
+            />
+            <Button type="submit" className="bg-teal-600 hover:bg-teal-700 px-8">
+              Send Request
+            </Button>
           </form>
         </CardContent>
       </Card>
 
-      {/* Pending received requests */}
-      <Card>
+      {/* Pending Friend Requests */}
+      <Card className="border-zinc-200 dark:border-zinc-800">
         <CardHeader>
-          <CardTitle>Pending Friend Requests</CardTitle>
+          <CardTitle>Pending Requests ({pendingRequests.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {pendingRequests.length === 0 ? (
-            <p className="text-gray-500">No pending requests</p>
+            <p className="text-zinc-500 py-8 text-center">No pending friend requests</p>
           ) : (
-            <ul className="space-y-4">
+            <div className="space-y-4">
               {pendingRequests.map((req) => (
-                <li key={req.id} className="flex justify-between items-center bg-gray-50 dark:bg-zinc-800 p-4 rounded-lg">
-                  <span>{req.sender.email || req.sender.name}</span>
-                  <form
-                    action={async () => {
-                      'use server';
-                      await acceptFriendRequest(req.id);
-                    }}
-                  >
-                    <Button type="submit" variant="default">
+                <div 
+                  key={req.id} 
+                  className="flex items-center justify-between bg-zinc-50 dark:bg-zinc-900 p-6 rounded-2xl"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {req.sender.name || req.sender.email}
+                    </p>
+                    <p className="text-sm text-zinc-500">{req.sender.email}</p>
+                  </div>
+                  <form action={async () => {
+                    'use server';
+                    await acceptFriendRequest(req.id);
+                  }}>
+                    <Button type="submit" className="bg-teal-600 hover:bg-teal-700">
                       Accept
                     </Button>
                   </form>
-                </li>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Current friends */}
-      <Card>
+      {/* Your Friends */}
+      <Card className="border-zinc-200 dark:border-zinc-800">
         <CardHeader>
           <CardTitle>Your Friends ({friendList.length})</CardTitle>
         </CardHeader>
         <CardContent>
           {friendList.length === 0 ? (
-            <p className="text-gray-500">No friends yet. Send a request to get started!</p>
+            <div className="text-center py-16 text-zinc-500">
+              <p>No friends yet.</p>
+              <p className="text-sm mt-2">Send a friend request above to get started.</p>
+            </div>
           ) : (
-            <ul className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {friendList.map((friend) => (
-                <li
-                  key={friend.id} // Now guaranteed unique
-                  className="bg-white dark:bg-zinc-900 p-4 rounded-lg border border-gray-200 dark:border-white/10"
+                <div 
+                  key={friend.id}
+                  className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 p-6 rounded-3xl hover:shadow-sm transition"
                 >
-                  <p className="font-medium">
-                    {friend.name || friend.email?.split('@')[0] || 'Anonymous'}
-                  </p>
-                  {friend.email && (
-                    <p className="text-sm text-gray-500 dark:text-zinc-400 mt-1">
-                      {friend.email}
-                    </p>
-                  )}
-                  {/* You can add a "Share habit" button here later */}
-                </li>
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-zinc-200 dark:bg-zinc-700 flex items-center justify-center font-medium text-lg">
+                      {(friend.name || friend.email || '?')[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-medium text-lg">
+                        {friend.name || friend.email?.split('@')[0]}
+                      </p>
+                      {friend.email && (
+                        <p className="text-sm text-zinc-500">{friend.email}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* You can add "Share a habit" button here later */}
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full mt-6 text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-950"
+                  >
+                    Share a Habit
+                  </Button>
+                </div>
               ))}
-            </ul>
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Sent requests (optional) */}
+      {/* Sent Requests (optional but useful) */}
       {sentRequests.length > 0 && (
-        <Card>
+        <Card className="border-zinc-200 dark:border-zinc-800">
           <CardHeader>
             <CardTitle>Sent Requests</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-3">
+            <div className="space-y-3">
               {sentRequests.map((req) => (
-                <li key={req.id} className="text-gray-600 dark:text-zinc-400">
-                  Waiting for {req.receiver.email || req.receiver.name}...
-                </li>
+                <div key={req.id} className="text-sm text-zinc-500 bg-zinc-50 dark:bg-zinc-900 p-4 rounded-2xl">
+                  Waiting for {req.receiver.name || req.receiver.email} to accept...
+                </div>
               ))}
-            </ul>
+            </div>
           </CardContent>
         </Card>
       )}

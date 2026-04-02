@@ -22,11 +22,8 @@ export default async function HabitDetail({ params: paramsPromise }: { params: P
 
   const currentUserId = session.user.id;
   const isOwner = data.habit.userId === currentUserId;
-
-  // Check if this habit was shared with the current user
   const isSharedWithMe = !isOwner && data.shares?.some(share => share.recipient.id === currentUserId);
 
-  // If neither owner nor recipient → 404
   if (!isOwner && !isSharedWithMe) {
     notFound();
   }

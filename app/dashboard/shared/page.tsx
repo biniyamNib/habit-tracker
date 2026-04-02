@@ -3,8 +3,8 @@ import { auth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { formatDistanceToNow } from 'date-fns';
 
 export default async function SharedWithMePage() {
@@ -13,7 +13,6 @@ export default async function SharedWithMePage() {
     redirect('/auth/signin');
   }
 
-  // Find all shares where current user is the recipient
   const sharedHabits = await prisma.share.findMany({
     where: {
       recipientId: session.user.id,
@@ -23,7 +22,7 @@ export default async function SharedWithMePage() {
         include: {
           checkIns: {
             orderBy: { date: 'desc' },
-            take: 10, // recent ones for streak calc
+            take: 10,
           },
           user: {
             select: { name: true, email: true, image: true },
@@ -35,19 +34,24 @@ export default async function SharedWithMePage() {
   });
 
   return (
-    <div className="space-y-8 p-4 md:p-6 max-w-5xl mx-auto">
-      <h1 className="text-3xl font-bold">Shared with Me</h1>
-      <p className="text-gray-600">
-        Habits your friends have shared with you for accountability.
-      </p>
+    <div className="max-w-5xl mx-auto space-y-12 p-6">
+      <div>
+        <h1 className="text-4xl font-semibold tracking-tight">Shared with Me</h1>
+        <p className="text-zinc-600 dark:text-zinc-400 mt-3">
+          Habits your friends have shared with you for mutual accountability
+        </p>
+      </div>
 
       {sharedHabits.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-xl border">
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-3xl py-20 px-8 text-center">
+          <div className="mx-auto w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-2xl flex items-center justify-center mb-6">
+            <span className="text-4xl">🤝</span>
+          </div>
           <h2 className="text-2xl font-semibold mb-4">No shared habits yet</h2>
-          <p className="text-gray-600 mb-6">
-            When friends share their habits with you, they'll appear here.
+          <p className="text-zinc-600 dark:text-zinc-400 max-w-md mx-auto mb-8">
+            When your friends share their habits with you, they will appear here.
           </p>
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" size="lg">
             <Link href="/dashboard">Back to My Habits</Link>
           </Button>
         </div>
@@ -57,7 +61,7 @@ export default async function SharedWithMePage() {
             const habit = share.habit;
             const owner = habit.user;
 
-            // Basic streak calculation (from recent check-ins)
+            // Current streak calculation
             const sortedCheckIns = habit.checkIns.sort(
               (a, b) => b.date.getTime() - a.date.getTime()
             );
@@ -73,47 +77,58 @@ export default async function SharedWithMePage() {
 
             const lastCheckIn = sortedCheckIns[0];
             const lastCheckInText = lastCheckIn
-              ? `${lastCheckIn.completed ? 'Done' : 'Missed'} ${formatDistanceToNow(lastCheckIn.date, { addSuffix: true })}`
+              ? `${lastCheckIn.completed ? '✅ Done' : '❌ Missed'} ${formatDistanceToNow(lastCheckIn.date, { addSuffix: true })}`
               : 'No check-ins yet';
 
             return (
-              <Card key={share.id} className="overflow-hidden hover:shadow-md transition">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-10 h-10 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: habit.color }}
-                    />
-                    <div>
-                      <CardTitle className="text-xl">{habit.name}</CardTitle>
-                      <CardDescription>
-                        Shared by {owner.name || owner.email?.split('@')[0]}
+              <Card 
+                key={share.id} 
+                className="border-zinc-200 dark:border-zinc-800 hover:shadow-md transition-all overflow-hidden"
+              >
+                <CardHeader className="pb-4">
+                  <div className="flex items-center gap-4">
+                    {owner?.image ? (
+                      <img
+                        src={owner.image}
+                        alt={owner.name || 'Owner'}
+                        className="w-12 h-12 rounded-2xl object-cover border border-zinc-200 dark:border-zinc-700"
+                      />
+                    ) : (
+                      <div
+                        className="w-12 h-12 rounded-2xl flex-shrink-0"
+                        style={{ backgroundColor: habit.color }}
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-xl tracking-tight truncate">{habit.name}</CardTitle>
+                      <CardDescription className="mt-1">
+                        Shared by {owner?.name || owner?.email?.split('@')[0] || 'a friend'}
                       </CardDescription>
                     </div>
                   </div>
                 </CardHeader>
 
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                   {habit.description && (
-                    <p className="text-gray-600 text-sm line-clamp-2">
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400 line-clamp-2">
                       {habit.description}
                     </p>
                   )}
 
-                  <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="grid grid-cols-2 gap-6 text-sm">
                     <div>
-                      <p className="font-medium text-green-600">{currentStreak} day streak</p>
-                      <p className="text-gray-500">Current</p>
+                      <p className="text-2xl font-semibold text-emerald-600">{currentStreak}</p>
+                      <p className="text-xs text-zinc-500">day streak</p>
                     </div>
                     <div>
                       <p className="font-medium">{lastCheckInText}</p>
-                      <p className="text-gray-500">Last check-in</p>
+                      <p className="text-xs text-zinc-500">Last activity</p>
                     </div>
                   </div>
 
-                  <Button asChild variant="outline" className="w-full">
-                    <Link href={`/dashboard/habits/${habit.id}?shared=true`}>
-                      View progress
+                  <Button asChild className="w-full py-6 bg-teal-600 hover:bg-teal-700">
+                    <Link href={`/dashboard/habits/${habit.id}`}>
+                      View Progress
                     </Link>
                   </Button>
                 </CardContent>

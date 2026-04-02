@@ -1,63 +1,56 @@
 // app/layout.tsx
-import type { Metadata } from 'next';
+'use client';
+
 import './globals.css';
+import { useEffect } from 'react';
 import { ThemeProvider } from '@/components/ThemeProvider';
-import Providers from '@/components/Providers'; // your existing one (SessionProvider + QueryClient)
-import { auth } from '@/lib/auth';
+import { SessionProvider } from 'next-auth/react';
+import Script from 'next/script';
+import Providers from '@/components/Providers';
 
-export const metadata: Metadata = {
-  title: {
-    default: 'ChainTogether - Build Habits Together',
-    template: '%s | ChainTogether',
-  },
-  description: 'Real accountability with friends. Track streaks, send nudges, and stay consistent together. Made in Ethiopia.',
-  keywords: ['habit tracker', 'accountability', 'streaks', 'friends', 'productivity', 'Ethiopia'],
-  authors: [{ name: 'Biniyam', url: 'https://github.com/yourusername' }],
-  openGraph: {
-    title: 'ChainTogether - Habits That Stick With Friends',
-    description: 'The social habit tracker that actually works.',
-    url: 'https://chain-together.vercel.app',
-    siteName: 'ChainTogether',
-    images: [
-      {
-        url: '/og-image.jpg', // add this image to /public later
-        width: 1200,
-        height: 630,
-      },
-    ],
-    locale: 'en_US',
-    type: 'website',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'ChainTogether',
-    description: 'Build habits together with real accountability.',
-    images: ['/og-image.jpg'],
-  },
-  icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon-16x16.png',
-    apple: '/apple-touch-icon.png',
-  },
-  manifest: '/site.webmanifest',
-};
-
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Initialize OneSignal
+    window.OneSignal = window.OneSignal || [];
+    window.OneSignal.push(() => {
+      window.OneSignal.init({
+        appId: "c36e8562-e566-48e0-9d50-0e9190db047d",   // ← Paste your App ID here
+        allowLocalhostAsSecureOrigin: true,     // Important for localhost
+        notifyButton: { enable: false },        // We use our own bell
+        promptOptions: {
+          slidedown: {
+            enabled: true,
+            autoPrompt: true,
+            timeDelay: 8,
+            pageViews: 1,
+          },
+        },
+      });
+    });
+  }, []);
 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Optional: Add Pusher or other CDN scripts here if needed */}
+        <Script
+          src="https://cdn.onesignal.com/sdks/OneSignalSDK.js"
+          strategy="afterInteractive"
+          async
+        />
       </head>
-      <body className="antialiased">
-        <ThemeProvider>
-          <Providers session={session}>{children}</Providers>
+      <body>
+        <SessionProvider>
+          <ThemeProvider>
+          <Providers>{children}</Providers>
         </ThemeProvider>
+        </SessionProvider>
       </body>
     </html>
   );
