@@ -76,6 +76,7 @@ export default function SignupPage() {
         await signIn('credentials', { email, password, redirect: false }); // re-trigger session
         router.refresh();   // Refresh server components
         router.push('/dashboard');
+        window.location.href = '/dashboard';
       } else {
         setError('Account created but sign in failed. Please try signing in manually.');
       }
